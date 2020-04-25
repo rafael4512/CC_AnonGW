@@ -29,7 +29,7 @@ def signal_handler(sig, frame):
 #conn ->socket para o cliente
 def receberPedido(conn):
 
-	data = conn.recv(1024) # guarda o pedido do cliente em data 	
+	data = conn.recv(4096) # guarda o pedido do cliente em data 	
 	res = enviarServ(ServPORT,data)	#envia o pedido para o servidor
 	#fh=res.find("\r\n\r\n")#calcula a posição do fim do cabeçalho.
 	#conn.sendall(res[fh+4:])	
@@ -73,15 +73,14 @@ def init():
 		print('\tAnonGW Disponivel!')
 		i=1
 		while True:
+			
+			conn, addr = s.accept() # aceita uma coneção e cria um socket novo
 			print i
 			i+=1
-			conn, addr = s.accept() # aceita uma coneção e cria um socket novo
 			x = threading.Thread(target=receberPedido, args=(conn,))#thred para receber o pedido.
 			x.start()
-			#thread.start_new_thread( receberPedido,(conn,))
-			#receberPedido(conn)
 	except socket.error:
-		print "\n\tErro ao criar o socket-80"
+		print "\n\tErro ao criar o socket!Esperar que seja fechado"
 	finally:
 		s.close()
 
