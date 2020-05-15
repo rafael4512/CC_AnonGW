@@ -1,20 +1,13 @@
-import socket
+import http.client
 import threading
+import sys
 def cli():
-	l = threading.Lock()
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	l.acquire() 	
-	s.connect(('localhost', 80))
-	s.send("GET / HTTP/1.1\r\nHost: 0.0.0.0\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n")
-	while True:
-		data=s.recv(1024)
-		if not data:
-			l.release()
-			break;
-		print data
-
+	BODY = "***filecontents***"
+	conn = http.client.HTTPConnection("localhost", 80)
+	conn.request("GET", "/file1", BODY)
+	response = conn.getresponse()
+	print(response.status, response.reason)
 
 
 for x in range(0,20):
-	x = threading.Thread(target=cli, args=())#
-	x.start()
+	cli()

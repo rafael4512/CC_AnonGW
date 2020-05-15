@@ -4,22 +4,36 @@ import sys
 import signal
 import socket
 import time
+import tgl
 import threading
-import thread
 from cryptography.fernet import Fernet
+from random import randint
 
 
-HOST = ''				
-PORT=int(sys.argv[2]) 	# porta de Listen
-peers=[]				#Os outros anonGW's.
+HOST = sys.argv[1]		#endereco do host.
+PORT_UDP=int(sys.argv[2]) 	# porta de Listen para anonGW
+peer=[]				#Os outros anonGW's.
 keySend=dict()
 clientId=dict()
-for x in range(0, len(sys.argv)):
-    keySend[sys.argv[x]]=Fernet.generate_key()
-    #peers.append(sys.argv[x]) 
-
 ServPORT=8000 #porta do servidor
-#s= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+#processa uma string necessaria para se conectar a outro anonGW.Devolve o par para se connectar diretamente ao socket
+def parsePeer(str):
+	l=str.split(":")#separa a string pelo char :, e coloca numa lista.
+	if (len(l)==2):
+		return (l[0],int(l[1]))
+	else:
+		return("-1",-1)
+
+
+#coloca os anonGW conhecidos na lista de Peers.
+for x in range(3, len(sys.argv)):
+	aux =parsePeer(sys.argv[x])
+	if (aux!=("-1",-1)):
+         peer.append(aux)
+
+
+
 
 #Função responsável por fechar o AnonGW,quando se envia SIGINT.
 def signal_handler(sig, frame):
@@ -37,28 +51,44 @@ def decrypt(msg,key):
 
 
 
-
-
 #s->socket na porta 80
 #conn ->socket para o cliente
-def receberPedido(conn,addr):
-	
-	data = conn.recv(4096) # guarda o pedido do cliente em data
-	enviarPedidoAGW(data,"0.0.0.0",81) 
+def receberPedidoCli(conn,addr):
+	data = conn.recv(4096) 			#Recebe o pedido.
+	id = randint(0, 10)				#gera um Id para o cliente.
+	clientId[(conn,addr)]=id
+
+	pacote=tgl.Header(1,len(data),1,0,data)#sQuery,id_cliente,n_ped,msg)
+	pacBin=pacote.converte()#pacote em Byts
+	resp=enviarPedidoAGW(pacBin,peer[randint(0, (len(peer)-1))]) #envia o pedido a outro anonGW
+	conn.sendall(resp) #envia  a resposta ao Cliente
 	conn.close()
-	return res
+	return True
 
 
-#envia um Pedido ao servidor , e retorna a resposta.
+
+#Metod usado pelo segundo anonGW,que envia a query ao servidor e renvia para anonGW
+def receberPedidoAnon(UDPServerSocket,addr,data):
+	pacote=tgl.desconverte(data)						#deconverte pq precisa de mandar apenas o pedido ao servidor .
+	res = enviarServ(ServPORT,pacote.getMsg().encode()) #se já vier de um anonGW
+	#print ("CHEGOU AO receberPedidoAnon():\n\t",res)
+	pacote=tgl.Header(0,len(res),1,0,res)				#cria um pacote
+	pacBin=pacote.converte()							#tranforma o pacote em Byts
+	UDPServerSocket.sendto(pacBin,addr)					#renvenvia a resposta ao anonGW 
+	
+
+
+
+
+#envia um Pedido ao servidor , e retorna a resposta. Tem de receber o pedido em byts(Não MEXER, está pronta!)
 def enviarServ(port,pedido): 
 	resp = bytearray()# array com os dados
 	try:
 		ss = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		ss.connect(('localhost', port))#socket para o servidor
-		ss.sendall(pedido) # envia os dados para o serv
-		i=1
+		ss.sendall(pedido) # envia os dados para o serv 
 		while True:
-			dados = ss.recv(4092) #recebe 1024 bits
+			dados = ss.recv(4092) #recebe 1024 bits 
 			if not dados:
 				break
 			resp.extend(dados) #coloca os byts no array.
@@ -67,63 +97,77 @@ def enviarServ(port,pedido):
 		ss.close() # fecha a conexao
 	return resp 
 
-def enviarPedidoAGW(msg,peer,port):
+
+
+
+
+def enviarPedidoAGW(msg,peer_addr):
 	sp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) #socket UDP
-	anon_addr = (peer,port)
-	sp.connect(anon_addr)
-	m=encrypt(msg,keySend[peer])
-	sp.sendto(keySend[peer],anon_addr)
-	sp.sendto(m,anon_addr)
+    #sp.connect((peer_addr[0],peer_addr[1]))
+    #sp.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 20)
+	#m=encrypt(msg,keySend[peer])
+	#sp.sendto(keySend[peer],anon_addr)
+    #print(msg)
+	sp.sendto(msg,(peer_addr[0], peer_addr[1]))#envia a 1 anowGw
+	resp=bytearray()
+	while True:
+		(dados,addr) = sp.recvfrom(4092) #recebe 1024 bits
+		pacote=tgl.desconverte(dados)
+		resp.extend(pacote.getMsg().encode())
+		if (len(dados)==len(pacote.getMsg()) +49):
+			break
+	return resp
+ 
 
-	return sp
 
 
-#def receberPedidoAGW()
-	
 
-#Inicia o  anonGW
-def init():
 
+def initTcpSocket():
 	try:
-		signal.signal(signal.SIGINT, signal_handler)  #fechar o anonGW .
-		s= socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
-		s.bind(('', PORT))
+		#signal.signal(signal.SIGINT, signal_handler)  #fechar o anonGW .
+		s= socket.socket(socket.AF_INET, socket.SOCK_STREAM) #socket TCP
+		h=parsePeer(HOST)
+		s.bind((h[0],h[1]))
 		s.listen(1) #Permite ter 40 pedidos antes de comecar a rejeitar.(Multicast)
 		print('\tAnonGW Disponivel!')
-		i=1
+		i=1# numero de pedidos recebidos
 		while True:
 			print("Waiting:",i)
 			i+=1
 			conn, addr = s.accept() # aceita uma coneção e cria um socket novo
-			print addr
-			x = threading.Thread(target=receberPedido, args=(conn,addr,))#thred para receber o pedido.
+			x = threading.Thread(target=receberPedidoCli, args=(conn,addr,))#thread para receber o pedido.
 			x.start()
-			#thread.start_new_thread( receberPedido,(conn,))
-			#receberPedido(conn)
 	except socket.error:
-		print "\n\tErro ao criar o socket-80"
+		print ("\n\tErro ao criar o socket TCP!")
 	finally:
 		s.close()
 
 
 
+
+
+
+
+#Inicia o  anonGW
+def init():
+	x = threading.Thread(target=initTcpSocket, args=())
+	x.start()
+	h=parsePeer(HOST)
+	UDPServerSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+	UDPServerSocket.bind((h[0], PORT_UDP))
+	i=1
+	while True:
+		(data,addr) = UDPServerSocket.recvfrom(4096)
+		print("ped:",i,"\t",data,addr)
+		i+=1
+		#if (addr[1]!=PORT_UDP):
+		y=threading.Thread(target=receberPedidoAnon, args=(UDPServerSocket,addr,data))
+		y.start()
+		#UDPServerSocket.sendto(bytesToSend, address)
+
 init()
 
 
-
-
-
-
-#Envia um pedido para um anonGW
-
-
-
-
-
-#	Obter os parametros recebidos
-# tarServ=sys.argv[1] 	#destino da mensagem. 
-# HOST = ''				# Symbolic name meaning all available interfaces.
-#PORT=int(sys.argv[2]) 		#Porta  em que o anonGW está a escuta.
- 
 
 
