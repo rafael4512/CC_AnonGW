@@ -6,8 +6,8 @@ import socket
 import time
 import tgl
 import threading
-from cryptography.fernet import Fernet
 from random import randint
+
 
 
 HOST = sys.argv[1]		#endereco do host.
@@ -16,6 +16,7 @@ peer=[]				#Os outros anonGW's.
 keySend=dict()
 clientId=dict()
 ServPORT=8000 #porta do servidor
+Tam_PACK=1024
 
 #processa uma string necessaria para se conectar a outro anonGW.Devolve o par para se connectar diretamente ao socket
 def parsePeer(str):
@@ -40,15 +41,6 @@ def signal_handler(sig, frame):
     print('\n\tAnonGW Fechado!')
     sys.exit(0)
 
-def encrypt(msg,key):
-	f = Fernet(key)
-	return f.encrypt(msg)
-
-def decrypt(msg,key):
-	f=Fernet(key)
-	return f.decrypt(m)
-
-
 
 
 #s->socket na porta 80
@@ -61,6 +53,8 @@ def receberPedidoCli(conn,addr):
 	pacote=tgl.Header(1,len(data),1,0,data)#sQuery,id_cliente,n_ped,msg)
 	pacBin=pacote.converte()#pacote em Byts
 	resp=enviarPedidoAGW(pacBin,peer[randint(0, (len(peer)-1))]) #envia o pedido a outro anonGW
+
+	print("XxXXXXXx",resp)
 	conn.sendall(resp) #envia  a resposta ao Cliente
 	conn.close()
 	return True
@@ -71,13 +65,27 @@ def receberPedidoCli(conn,addr):
 def receberPedidoAnon(UDPServerSocket,addr,data):
 	pacote=tgl.desconverte(data)						#deconverte pq precisa de mandar apenas o pedido ao servidor .
 	res = enviarServ(ServPORT,pacote.getMsg().encode()) #se já vier de um anonGW
-	#print ("CHEGOU AO receberPedidoAnon():\n\t",res)
-	pacote=tgl.Header(0,len(res),1,0,res)				#cria um pacote
-	pacBin=pacote.converte()							#tranforma o pacote em Byts
-	UDPServerSocket.sendto(pacBin,addr)					#renvenvia a resposta ao anonGW 
+	#print("len(msg):::::",len(res.decode()))
+	divideEmPacotes(UDPServerSocket,addr,res)
+	#pacote=tgl.Header(0,len(res),1,0,res)				#cria um pacote
+	#pacBin=pacote.converte()							#tranforma o pacote em Byts
+	#UDPServerSocket.sendto(pacBin,addr)					#renvenvia a resposta ao anonGW 
 	
 
-
+#divide em pacotes e manda
+def divideEmPacotes(UDPServerSocket,addr,msg):
+	tam=len(msg)
+	#print("len(msg):::::",tam)
+	while(len(msg) >= Tam_PACK):
+		print ("DATA",msg[:Tam_PACK])
+		pacote=tgl.Header(0,tam,1,0,msg[:Tam_PACK])
+		msg=msg[Tam_PACK:]
+		pacBin=pacote.converte()
+		UDPServerSocket.sendto(pacBin,addr)	
+	#envia o ultimo pacote.
+	pacote=tgl.Header(0,tam,1,0,msg[:len(msg)])
+	pacBin=pacote.converte()
+	UDPServerSocket.sendto(pacBin,addr)	
 
 
 #envia um Pedido ao servidor , e retorna a resposta. Tem de receber o pedido em byts(Não MEXER, está pronta!)
@@ -88,10 +96,10 @@ def enviarServ(port,pedido):
 		ss.connect(('localhost', port))#socket para o servidor
 		ss.sendall(pedido) # envia os dados para o serv 
 		while True:
-			dados = ss.recv(4092) #recebe 1024 bits 
+			dados = ss.recv(1024) #recebe 1024 bits 
 			if not dados:
 				break
-			resp.extend(dados) #coloca os byts no array.
+			resp.extend(dados)
 	except Exception as e: print(e)
 	finally:
 		ss.close() # fecha a conexao
@@ -103,19 +111,18 @@ def enviarServ(port,pedido):
 
 def enviarPedidoAGW(msg,peer_addr):
 	sp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) #socket UDP
-    #sp.connect((peer_addr[0],peer_addr[1]))
-    #sp.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 20)
-	#m=encrypt(msg,keySend[peer])
-	#sp.sendto(keySend[peer],anon_addr)
-    #print(msg)
 	sp.sendto(msg,(peer_addr[0], peer_addr[1]))#envia a 1 anowGw
 	resp=bytearray()
+	tam_acc=0# acumulador de tamanho dos pacotes.
 	while True:
-		(dados,addr) = sp.recvfrom(4092) #recebe 1024 bits
+		(dados,addr) = sp.recvfrom(Tam_PACK+49) #recebe 1024 bits
 		pacote=tgl.desconverte(dados)
+		tam_acc+=len(dados)-49
 		resp.extend(pacote.getMsg().encode())
-		if (len(dados)==len(pacote.getMsg()) +49):
+		if (tam_acc>=pacote.getTam()):
+			print("tam_acc:",tam_acc,"==",pacote.getTam(),"<-tam do pacotte")
 			break
+	#print("RESPPP:::",resp)
 	return resp
  
 
@@ -129,7 +136,7 @@ def initTcpSocket():
 		s= socket.socket(socket.AF_INET, socket.SOCK_STREAM) #socket TCP
 		h=parsePeer(HOST)
 		s.bind((h[0],h[1]))
-		s.listen(1) #Permite ter 40 pedidos antes de comecar a rejeitar.(Multicast)
+		s.listen(40) #Permite ter 40 pedidos antes de comecar a rejeitar.(Multicast)
 		print('\tAnonGW Disponivel!')
 		i=1# numero de pedidos recebidos
 		while True:
