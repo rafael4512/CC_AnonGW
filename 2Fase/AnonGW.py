@@ -16,7 +16,17 @@ peer=[]				#Os outros anonGW's.
 keySend=dict()
 clientId=dict()
 ServPORT=8000 #porta do servidor
-Tam_PACK=1024
+Tam_PACK=102
+Clientes=1	#acumaldor de Id's para clientes 
+
+iid_lock = threading.Lock()
+
+def next_id():
+    global Clientes
+    with iid_lock:
+        result = Clientes
+        Clientes += 1
+    return result
 
 #processa uma string necessaria para se conectar a outro anonGW.Devolve o par para se connectar diretamente ao socket
 def parsePeer(str):
@@ -44,19 +54,19 @@ def signal_handler(sig, frame):
 
 
 #s->socket na porta 80
-#conn ->socket para o cliente
-def receberPedidoCli(conn,addr):
+#conn ->socket para o cliente. VEr se precisamos do addr!!!!
+def receberPedidoCli(conn,addr,id_cli):
 	data = conn.recv(4096) 			#Recebe o pedido.
-	id = randint(0, 10)				#gera um Id para o cliente.
-	clientId[(conn,addr)]=id
+	id = 1#gera um Id para o cliente.
+	clientId[id_cli]=(conn,addr)
 
-	pacote=tgl.Header(1,len(data),1,0,data)#sQuery,id_cliente,n_ped,msg)
+	pacote=tgl.Header(1,len(data),id_cli,0,data)#sQuery,id_cliente,n_ped,msg)
 	pacBin=pacote.converte()#pacote em Byts
-	resp=enviarPedidoAGW(pacBin,peer[randint(0, (len(peer)-1))]) #envia o pedido a outro anonGW
+	resp=enviarPedidoAGW(pacBin,peer[randint(0, (len(peer)-1))],id_cli) #envia o pedido a outro anonGW
 
-	print("XxXXXXXx",resp)
-	conn.sendall(resp) #envia  a resposta ao Cliente
-	conn.close()
+	#print("XxXXXXXx",resp)
+	#conn.sendto(resp,clientId[id_cli]) #envia  a resposta ao Cliente
+	#conn.close()
 	return True
 
 
@@ -77,10 +87,10 @@ def divideEmPacotes(UDPServerSocket,addr,msg):
 	tam=len(msg)
 	#print("len(msg):::::",tam)
 	while(len(msg) >= Tam_PACK):
-		print ("DATA",msg[:Tam_PACK])
 		pacote=tgl.Header(0,tam,1,0,msg[:Tam_PACK])
 		msg=msg[Tam_PACK:]
 		pacBin=pacote.converte()
+		#print ("DATA",pacote.desconverte())
 		UDPServerSocket.sendto(pacBin,addr)	
 	#envia o ultimo pacote.
 	pacote=tgl.Header(0,tam,1,0,msg[:len(msg)])
@@ -109,18 +119,24 @@ def enviarServ(port,pedido):
 
 
 
-def enviarPedidoAGW(msg,peer_addr):
+def enviarPedidoAGW(msg,peer_addr,id_cli):
 	sp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) #socket UDP
 	sp.sendto(msg,(peer_addr[0], peer_addr[1]))#envia a 1 anowGw
 	resp=bytearray()
 	tam_acc=0# acumulador de tamanho dos pacotes.
 	while True:
 		(dados,addr) = sp.recvfrom(Tam_PACK+49) #recebe 1024 bits
+		print("\n::DADOS::\t\t",dados,"\tsp:::",sp.getsockname())
 		pacote=tgl.desconverte(dados)
+		#ver ordem!
 		tam_acc+=len(dados)-49
-		resp.extend(pacote.getMsg().encode())
+		(conn,addr) = clientId[id_cli]
+		#print ("\n\n\n\nADRESS___:\t",conn.getsockname())
+		conn.sendto(pacote.getMsg().encode(),addr)# envia a resposta para o cliente,do ultimo AnonGw.
+		#resp.extend(pacote.getMsg().encode())
 		if (tam_acc>=pacote.getTam()):
 			print("tam_acc:",tam_acc,"==",pacote.getTam(),"<-tam do pacotte")
+			conn.close()
 			break
 	#print("RESPPP:::",resp)
 	return resp
@@ -143,7 +159,7 @@ def initTcpSocket():
 			print("Waiting:",i)
 			i+=1
 			conn, addr = s.accept() # aceita uma coneção e cria um socket novo
-			x = threading.Thread(target=receberPedidoCli, args=(conn,addr,))#thread para receber o pedido.
+			x = threading.Thread(target=receberPedidoCli, args=(conn,addr,next_id()))#thread para receber o pedido.
 			x.start()
 	except socket.error:
 		print ("\n\tErro ao criar o socket TCP!")
@@ -166,7 +182,7 @@ def init():
 	i=1
 	while True:
 		(data,addr) = UDPServerSocket.recvfrom(4096)
-		print("ped:",i,"\t",data,addr)
+		print("ped:",i,"\t",UDPServerSocket.getsockname(),addr)
 		i+=1
 		#if (addr[1]!=PORT_UDP):
 		y=threading.Thread(target=receberPedidoAnon, args=(UDPServerSocket,addr,data))

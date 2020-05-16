@@ -33,10 +33,13 @@ class Header:
 		bits += '{0:016b}'.format(self.id_cliente)
 		bits += '{0:016b}'.format(self.n_ped)
 		byts = bits.encode() +self.msg
+		#byts = bits.encode('utf-8').strip() +self.msg
 		return byts
 
 def desconverte(byts):
+	#print("2222222\t\t",byts[49:])
 	b=byts.decode()
+	#print("4444444\n")
 	isQuery=int(b[0],2)
 	tam=int(b[1:17],2) 
 	id_cliente=int(b[18:33],2)
