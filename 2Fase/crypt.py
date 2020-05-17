@@ -93,12 +93,12 @@ def main():
     # https://docs.python.org/3/library/base64.html
     # encodes the bytes-like object s
     # returns bytes
-    encrypted = b64encode(rsa.encrypt(msg1,public))#encripta
+    encrypted = b64encode(rsa.encrypt(msg1,public))                 #encripta com chave publica
     # decodes the Base64 encoded bytes-like object or ASCII string s
     # returns the decoded bytes
-    signature = b64encode(rsa.sign(msg1, private, "SHA-512"))#assina
-    decrypted = rsa.decrypt(b64decode(encrypted),private)#desencripta
-    verify = rsa.verify(msg1, b64decode(signature), public)#verifica
+    signature = b64encode(rsa.sign(msg1, private, "SHA-512"))       #assina com a privada
+    decrypted = rsa.decrypt(b64decode(encrypted),private)           #desencripta com a privada 
+    verify = rsa.verify(msg1, b64decode(signature), public)         #verifica
 
     #print(private.exportKey('PEM'))
     #print(public.exportKey('PEM'))
