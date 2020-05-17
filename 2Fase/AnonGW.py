@@ -1,5 +1,5 @@
 #coding: utf-8
-#Teste->	anonGW target-server 10.3.3.1 port 80 overlay-peers 10.1.1.2 10.4.4.2 10.4.4.3
+#Teste->	  python3 AnonGW.py 127.0.0.1:81 6667 127.0.0.1:6666
 import sys
 import signal
 import socket
@@ -19,14 +19,24 @@ ServPORT=8000 #porta do servidor
 Tam_PACK=102
 Clientes=1	#acumaldor de Id's para clientes 
 
-iid_lock = threading.Lock()
+iid_lock = threading.Lock()# lock responsavel pelo  increment ID.
 
+#Incrementa a Variavel Clientes.
 def next_id():
     global Clientes
     with iid_lock:
         result = Clientes
         Clientes += 1
     return result
+
+def atualizaDic(id_cli,novoValue):
+    global clientId
+    with iid_lock:
+         clientId[id_cli]=novoValue
+    return True
+
+
+
 
 #processa uma string necessaria para se conectar a outro anonGW.Devolve o par para se connectar diretamente ao socket
 def parsePeer(str):
@@ -58,11 +68,11 @@ def signal_handler(sig, frame):
 def receberPedidoCli(conn,addr,id_cli):
 	data = conn.recv(4096) 			#Recebe o pedido.
 	id = 1#gera um Id para o cliente.
-	clientId[id_cli]=(conn,addr)
-
+	clientId[id_cli]=(conn,addr,0)
+	#print("ID_CLIENTE:",id_cli,"\n")
 	pacote=tgl.Header(1,len(data),id_cli,0,data)#sQuery,id_cliente,n_ped,msg)
 	pacBin=pacote.converte()#pacote em Byts
-	resp=enviarPedidoAGW(pacBin,peer[randint(0, (len(peer)-1))],id_cli) #envia o pedido a outro anonGW
+	resp=enviarPedidoAGW(pacBin,peer[randint(0, (len(peer)-1))]) #envia o pedido a outro anonGW
 
 	#print("XxXXXXXx",resp)
 	#conn.sendto(resp,clientId[id_cli]) #envia  a resposta ao Cliente
@@ -76,24 +86,26 @@ def receberPedidoAnon(UDPServerSocket,addr,data):
 	pacote=tgl.desconverte(data)						#deconverte pq precisa de mandar apenas o pedido ao servidor .
 	res = enviarServ(ServPORT,pacote.getMsg().encode()) #se já vier de um anonGW
 	#print("len(msg):::::",len(res.decode()))
-	divideEmPacotes(UDPServerSocket,addr,res)
+	divideEmPacotes(UDPServerSocket,addr,res,pacote.getCliente())
 	#pacote=tgl.Header(0,len(res),1,0,res)				#cria um pacote
 	#pacBin=pacote.converte()							#tranforma o pacote em Byts
 	#UDPServerSocket.sendto(pacBin,addr)					#renvenvia a resposta ao anonGW 
 	
 
 #divide em pacotes e manda
-def divideEmPacotes(UDPServerSocket,addr,msg):
+def divideEmPacotes(UDPServerSocket,addr,msg,id_cli):
 	tam=len(msg)
 	#print("len(msg):::::",tam)
+	n_ped=1
 	while(len(msg) >= Tam_PACK):
-		pacote=tgl.Header(0,tam,1,0,msg[:Tam_PACK])
+		pacote=tgl.Header(0,tam,id_cli,n_ped,msg[:Tam_PACK])
 		msg=msg[Tam_PACK:]
 		pacBin=pacote.converte()
+		n_ped+=1
 		#print ("DATA",pacote.desconverte())
-		UDPServerSocket.sendto(pacBin,addr)	
+		UDPServerSocket.sendto(pacBin,addr)	#renvenvia a resposta ao anonGW 
 	#envia o ultimo pacote.
-	pacote=tgl.Header(0,tam,1,0,msg[:len(msg)])
+	pacote=tgl.Header(0,tam,id_cli,n_ped,msg[:len(msg)])
 	pacBin=pacote.converte()
 	UDPServerSocket.sendto(pacBin,addr)	
 
@@ -118,27 +130,28 @@ def enviarServ(port,pedido):
 
 
 
-
-def enviarPedidoAGW(msg,peer_addr,id_cli):
+def enviarPedidoAGW(msg,peer_addr):
 	sp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) #socket UDP
 	sp.sendto(msg,(peer_addr[0], peer_addr[1]))#envia a 1 anowGw
 	resp=bytearray()
-	tam_acc=0# acumulador de tamanho dos pacotes.
+	tam_acc=0# acumulador temporário de tamanho de cada pacotes.
 	while True:
-		(dados,addr) = sp.recvfrom(Tam_PACK+49) #recebe 1024 bits
-		print("\n::DADOS::\t\t",dados,"\tsp:::",sp.getsockname())
+		(dados,adr) = sp.recvfrom(Tam_PACK+49) #recebe 1024 bits
 		pacote=tgl.desconverte(dados)
+		#print("Tam_PACK:",pacote.getTam(),"\n")
 		#ver ordem!
-		tam_acc+=len(dados)-49
-		(conn,addr) = clientId[id_cli]
-		#print ("\n\n\n\nADRESS___:\t",conn.getsockname())
+		#print(pacote.getNumPed(),"\t",pacote.getCliente())
+		(conn,addr,acc) = clientId[pacote.getCliente()]
+		tam_acc= acc +len(dados)-49
+		atualizaDic(pacote.getCliente(),(conn,addr,tam_acc))
+		(c1,a1,acc2)=clientId[pacote.getCliente()]
+		print("cliente:",pacote.getCliente(),len(dados)-49)
 		conn.sendto(pacote.getMsg().encode(),addr)# envia a resposta para o cliente,do ultimo AnonGw.
-		#resp.extend(pacote.getMsg().encode())
-		if (tam_acc>=pacote.getTam()):
+		if (tam_acc==pacote.getTam() & tam_acc!=0):
 			print("tam_acc:",tam_acc,"==",pacote.getTam(),"<-tam do pacotte")
 			conn.close()
 			break
-	#print("RESPPP:::",resp)
+		tam_acc=0
 	return resp
  
 

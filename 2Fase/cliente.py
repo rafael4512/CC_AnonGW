@@ -5,7 +5,7 @@ import sys
 
 def cli():
 	BODY = ""
-	conn = http.client.HTTPConnection("localhost", 80)
+	conn = http.client.HTTPConnection("127.0.0.1", 80)
 	conn.request("GET", "/file1", BODY)
 	response = conn.getresponse()
 	#print(response)#, response.reason)
@@ -14,7 +14,7 @@ def cli():
 
 def cli2():
 	BODY = "***filecontents***"
-	conn = http.client.HTTPConnection("localhost", 80)
+	conn = http.client.HTTPConnection("127.0.0.1", 80)
 	conn.request("GET", "/", BODY)
 	response = conn.getresponse()
 	#print(response)#, response.reason)
