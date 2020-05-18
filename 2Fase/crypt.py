@@ -8,7 +8,8 @@ from types import ModuleType, FunctionType
 from gc import get_referents
 import cryptography.exceptions
 
-def generate_key(name): #Gera e armazena um par de Chaves(Pública e Privada)
+#Gera e armazena um par de Chaves(Pública e Privada)
+def generate_key(name): 
     private_key = rsa.generate_private_key( #Cria Chave Privada
             public_exponent=65537,
             key_size=2048,
@@ -34,7 +35,7 @@ def generate_key(name): #Gera e armazena um par de Chaves(Pública e Privada)
     with open(y, 'wb') as f: #Guarda Chave Pública
         f.write(pem)
 
-
+#assina uma mensagem, passando o nome do ficheiro(colocado anteriormente na funcão generate_key).Retorna a assinatura
 def signing(name,message):
     x = name + '_private_key.pem'
     with open(x, "rb") as key_file: #Lê a Chave Privada
@@ -60,7 +61,7 @@ def signing(name,message):
     )
     return signature #Retorna Assinatura
 
-
+#assina uma mensagem, passando o nome do ficheiro(colocado anteriormente na funcão generate_key), a assinatura e a mensagem.Retorna um excecao se a assinatura nao for correta.
 def verification(name,signature,message):
     x = name + '_private_key.pem'
     with open(x, "rb") as key_file: #Lê a Chave Privada
@@ -86,7 +87,7 @@ def verification(name,signature,message):
         hashes.SHA256()
     )
 
-
+#encripta uma msg
 def encrypt(message,name_publicKey):
     y = name_publicKey + '_public_key.pem'
     with open(y, "rb") as key_file: #Lê a Chave Pública
@@ -105,7 +106,7 @@ def encrypt(message,name_publicKey):
     )
     return ciphertext
 
-
+#desencripta uma msg
 def decrypt(ciphertext,name_privateKey):
     x = name_privateKey + '_private_key.pem'
     with open(x, "rb") as key_file: #Lê a Chave Privada
@@ -128,11 +129,11 @@ def decrypt(ciphertext,name_privateKey):
 
 
 
-
+#EXEMPLO DE FUNCIONAMENTO:
 #generate_key("6666")
-message = "Ola sou o joão!"
-ciphertext=encrypt(message.encode(),"6666") 
-s=signing('6666',ciphertext)
+#message = "Ola sou o José!" 
+#ciphertext=encrypt(message.encode(),"6666") 
+#s=signing('6666',ciphertext)
 #print(s)
 #msg=decrypt(ciphertext,"6666") 
 #try:
