@@ -6,6 +6,7 @@ import socket
 import time
 import tgl
 import threading
+import crypt
 from random import randint
 
 
@@ -66,16 +67,24 @@ def receberPedidoCli(conn,addr,id_cli):
 	data = conn.recv(4096) 										 #Recebe o pedido.
 	clientId[id_cli]=(conn,addr,0)								 #guarda a coneção no dicionario
 	pacote=tgl.Header(1,0,id_cli,0,data)						 #encapsula num  pacote.
-	pacBin=pacote.converte()									 #pacote em Byts
-	resp=enviarPedidoAGW(pacBin,peer[randint(0, (len(peer)-1))]) #envia o pedido a outro anonGW
+	pacBin_plain=pacote.converte()							     #pacote em Byts
+	
+	anon=peer[randint(0, (len(peer)-1))]						 #calcula o proximo anonGW 
+	pacBin_cipher=crypt.encrypt(pacBin_plain,str(anon[1]))		 #encripta o pacote bin!
+	#signing(str(PORT_UDP),pacBin_cipher)						 #asssina o pacote
+	#print("\nPedido:"pacBin_cipher)
+	resp=enviarPedidoAGW(pacBin_cipher,anon) 					 #envia o pedido a outro anonGW
 	return True
 
 
 
 #Metod usado pelo segundo anonGW,que envia a query ao servidor e renvia para anonGW
-def receberPedidoAnon(UDPServerSocket,addr,data):
-	pacote=tgl.desconverte(data)						#deconverte pq precisa de mandar apenas o pedido ao servidor .
-	res = enviarServ(ServPORT,pacote,UDPServerSocket,addr) #se já vier de um anonGW
+def receberPedidoAnon(UDPServerSocket,addr,data_cipher):
+	#print("\nPedido encriptado:",data_cipher)								#mostrar o pedido encriptado!
+	data=crypt.decrypt(data_cipher,str(UDPServerSocket.getsockname()[1]))	#desencripta a msg
+	#print("\nPedido desencriptado:",data)									#mostrar o pedido desencriptado!
+	pacote=tgl.desconverte(data)											#deconverte pq precisa de mandar apenas o pedido ao servidor .
+	res = enviarServ(ServPORT,pacote,UDPServerSocket,addr)					#se já vier de um anonGW
 
 
 #envia um Pedido ao servidor , e retorna a resposta. Tem de receber o pedido em byts(Não MEXER, está pronta!)
@@ -134,7 +143,7 @@ def enviarPedidoAGW(msg,peer_addr):
 #Inicia o uma thread para processar pedidos TCP de clientes.
 def initTcpSocket():
 	try:
-		#signal.signal(signal.SIGINT, signal_handler)  #fechar o anonGW .
+		#signal.signal(signal.SIGINT, signal_handler)  			#fechar o anonGW .
 		s= socket.socket(socket.AF_INET, socket.SOCK_STREAM) 	#socket TCP
 		h=parsePeer(HOST)										#separa a string, (ip_socket,porta)
 		s.bind((h[0],h[1]))										#associa o socket ao endereco respectivo
@@ -155,6 +164,7 @@ def initTcpSocket():
 #Inicia o  anonGW
 def init():
 	try:
+		geraChaves(PORT_UDP)#gera chaves privadas e publicas com o nome da porta UDP
 		#signal.signal(signal.SIGINT, signal_handler)
 		x = threading.Thread(target=initTcpSocket, args=())							  #thread reponsavel pela porta 80,atende pedidos TCP.
 		x.start()																	  #inicia  thread reponsavel pela porta 80.
@@ -176,6 +186,12 @@ def init():
 		UDPServerSocket.close()
 
 
+
+
+
+
+def geraChaves(port):	
+	crypt.generate_key(str(port))#funcao que gera as chaves
 
 init()
 
