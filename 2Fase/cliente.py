@@ -18,7 +18,7 @@ def cli():
 def cli2():
 	BODY = "***filecontents***"
 
-	conn = http.client.HTTPConnection("127.0.0.1", 80)
+	conn = http.client.HTTPConnection("127.0.0.1", 81)
 	conn.request("GET", "/", BODY)
 	response = conn.getresponse()
 	#print(response)#, response.reason
@@ -27,7 +27,7 @@ def cli2():
 
 
 
-for x in range(0,50):
+for x in range(0,10):
 	y=threading.Thread(target=cli, args=())
 	y2=threading.Thread(target=cli2, args=())
 	#if (x==3):
