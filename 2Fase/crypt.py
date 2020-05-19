@@ -129,6 +129,7 @@ def decrypt(ciphertext,name_privateKey):
 
 
 
+
 #EXEMPLO DE FUNCIONAMENTO:
 #generate_key("6666")
 #message = "Ola sou o José!" 
@@ -145,5 +146,20 @@ def decrypt(ciphertext,name_privateKey):
 
 
 
+
+
+#key = Fernet.generate_key()
+#print("Chave original \t",key)
+#ciphertext=encrypt(key,"6666")
+#s=signing('6666',ciphertext)
+#try:
+#    verification('6666',s,ciphertext)#receve o texto cifrado e verifica se a msg tem essa signatura.
+#    print("VERIFICADO COM SUCESSO")
+#except cryptography.exceptions.InvalidSignature:
+#    print("Cliente desconhecido")
+#
+#msg=decrypt(ciphertext,"6666") 
+#print("\n\n FINAl:",msg)
+#plain=f.decrypt(token)
 
 

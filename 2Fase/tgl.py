@@ -7,12 +7,13 @@ import base64
 #classe para o cabeçalho dos pacotes do protocolo ANONGW
 class Header:
 	#Método construtor (306 bits de cabeçalho).A assinatura tem 256.
-	def __init__(self,sig,isQuery,ultimoPac,id_cliente,n_ped,msg):
+	def __init__(self,sig,isQuery,ultimoPac,id_cliente,n_ped,port,msg):
 		self.sig=sig
 		self.isQuery=isQuery
 		self.ultimoPac=ultimoPac
 		self.id_cliente=id_cliente
 		self.n_ped=n_ped
+		self.port=port#porta de onde veio o pedido
 		self.msg=msg
 
 	def getCliente(self):
@@ -32,12 +33,15 @@ class Header:
 
 	def get_isQuery(self):
 		return self.isQuery
+	def getPort(self):
+		return self.port
 
 	def converte(self):
 		bits  = '{0:01b}'.format(self.isQuery)		#1 	 bit
 		bits += '{0:01b}'.format(self.ultimoPac)	#1	 bit
 		bits += '{0:016b}'.format(self.id_cliente)	#16	 bits
 		bits += '{0:032b}'.format(self.n_ped)		#32  bits
+		bits += '{0:016b}'.format(self.port)
 		byts  = self.sig + bits.encode() + self.msg
 		return byts
 	
@@ -47,7 +51,7 @@ class Header:
 
 
 def desconverte(byts):
-	b=byts[256:306].decode()
+	b=byts[256:322].decode()
 	#print("Header:",b,"\n")
 	#print("4444444\n")
 	sig=byts[:256]
@@ -59,10 +63,10 @@ def desconverte(byts):
 	id_cliente=int(b[2:18],2)
 	#print("\tId:",id_cliente)
 	n_ped=int(b[18:50],2)
+	port=int(b[50:66],2)
 	#print("\tNped:",n_ped)
-	msg=byts[306:]
-	#print("\t",msg)
-	return Header(sig,isQuery,ultimoPac,id_cliente,n_ped,msg)
+	msg=byts[322:]
+	return Header(sig,isQuery,ultimoPac,id_cliente,n_ped,port,msg)
 
 
 
