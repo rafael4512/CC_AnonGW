@@ -4,12 +4,13 @@ from Crypto.Cipher import PKCS1_OAEP
 import base64
 
 
-
+#classe para o cabeçalho dos pacotes do protocolo ANONGW
 class Header:
-	#Método construtor
-	def __init__(self,isQuery,tam,id_cliente,n_ped,msg):
+	#Método construtor (306 bits de cabeçalho).A assinatura tem 256.
+	def __init__(self,sig,isQuery,ultimoPac,id_cliente,n_ped,msg):
+		self.sig=sig
 		self.isQuery=isQuery
-		self.tam=tam
+		self.ultimoPac=ultimoPac
 		self.id_cliente=id_cliente
 		self.n_ped=n_ped
 		self.msg=msg
@@ -22,76 +23,48 @@ class Header:
 
 	def getMsg(self):
 		return self.msg
-
 	
-	def getTam(self):
-		return self.tam
+	def is_ultimoPac(self):
+		return self.ultimoPac
+
+	def getSignature(self):
+		return self.sig
+
+	def get_isQuery(self):
+		return self.isQuery
 
 	def converte(self):
-		bits = '{0:01b}'.format(self.isQuery)
-		bits += '{0:016b}'.format(self.tam)
-		bits += '{0:016b}'.format(self.id_cliente)
-		bits += '{0:016b}'.format(self.n_ped)
-		byts = bits.encode() +self.msg
-		#byts = bits.encode('utf-8').strip() +self.msg
+		bits  = '{0:01b}'.format(self.isQuery)		#1 	 bit
+		bits += '{0:01b}'.format(self.ultimoPac)	#1	 bit
+		bits += '{0:016b}'.format(self.id_cliente)	#16	 bits
+		bits += '{0:032b}'.format(self.n_ped)		#32  bits
+		byts  = self.sig + bits.encode() + self.msg
 		return byts
+	
+	def __str__(self):
+		return "Header:\nSig:"+str(self.sig)+"\nQuery:"+str(self.isQuery)+"\nUltimoPacote:"+str(self.ultimoPac)+"\nId_Cliente:"+str(self.id_cliente)+"\nN_Ped:"+str(self.n_ped)+"\nDATA:"+str(self.msg)
+
+
 
 def desconverte(byts):
-	#print("2222222\t\t",byts[49:])
-	b=byts.decode()
+	b=byts[256:306].decode()
+	#print("Header:",b,"\n")
 	#print("4444444\n")
+	sig=byts[:256]
+	#print("\tgetSignature::",sig)
 	isQuery=int(b[0],2)
-	tam=int(b[1:17],2) 
-	id_cliente=int(b[18:33],2)
-	n_ped=int(b[34:49],2)
-	msg=b[49:]
-	return Header(isQuery,tam,id_cliente,n_ped,msg)
+	#print("\tisQuery:",isQuery)
+	ultimoPac=int(b[1],2) 
+	#print("\tUltimoPAC:",ultimoPac)
+	id_cliente=int(b[2:18],2)
+	#print("\tId:",id_cliente)
+	n_ped=int(b[18:50],2)
+	#print("\tNped:",n_ped)
+	msg=byts[306:]
+	#print("\t",msg)
+	return Header(sig,isQuery,ultimoPac,id_cliente,n_ped,msg)
 
 
-
-#gerador de chaves ->(private,public)
-def generate_keys():
-    modulus_length = 1024
-
-    key = RSA.generate(modulus_length)
-    #print (key.exportKey())
-
-    pub_key = key.publickey()
-    #print (pub_key.exportKey())
-
-    return key, pub_key
-
-
-#encripta uma msg com uma chave.Retorna a mensagem codificada e em byts.
-def encrypt_private_key(a_message, private_key):
-    encryptor = PKCS1_OAEP.new(private_key)
-    encrypted_msg = encryptor.encrypt(a_message)
-    #print(encrypted_msg)
-    encoded_encrypted_msg = base64.b64encode(encrypted_msg)
-    #print(encoded_encrypted_msg)
-    return encoded_encrypted_msg
-
-
-# desencripta uma msg com uma chave.Retorna a msg desencriptada!
-def decrypt_public_key(encoded_encrypted_msg, public_key):
-    encryptor = PKCS1_OAEP.new(public_key)
-    decoded_encrypted_msg = base64.b64decode(encoded_encrypted_msg)
-    #print(decoded_encrypted_msg)
-    decoded_decrypted_msg = encryptor.decrypt(decoded_encrypted_msg)
-    #print(decoded_decrypted_msg)
-    return decoded_decrypted_msg
-
-
-
-
-#Exemplo de funcionamento.
-#def main():
-#  private, public = generate_keys()
-#  print (private)
-#  message = b'Hello world'
-#  encoded = encrypt_private_key(message, public)
-#  msg=decrypt_public_key(encoded, private)
-#  print (msg)
 
 
 

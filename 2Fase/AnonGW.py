@@ -8,15 +8,16 @@ import tgl
 import threading
 import crypt
 from random import randint
+import cryptography.exceptions
 
 
-
-HOST = sys.argv[1]		#endereco do host.
+HOST = sys.argv[1]			#endereco do host.
 PORT_UDP=int(sys.argv[2]) 	# porta de Listen para anonGW
-peer=[]				#Os outros anonGW's.
+peer=[]						#Os outros anonGW's.
 clientId=dict()
 ServPORT=8000 #porta do servidor
-Tam_PACK=1024
+Tam_PACK=32
+Tam_Header=306
 Clientes=1	#acumaldor de Id's para clientes 
 iid_lock = threading.Lock()# lock responsavel pelo  increment ID.
 
@@ -66,46 +67,58 @@ def signal_handler(sig, frame):
 def receberPedidoCli(conn,addr,id_cli):
 	data = conn.recv(4096) 										 #Recebe o pedido.
 	clientId[id_cli]=(conn,addr,0)								 #guarda a coneção no dicionario
-	pacote=tgl.Header(1,0,id_cli,0,data)						 #encapsula num  pacote.
-	pacBin_plain=pacote.converte()							     #pacote em Byts
 	
-	anon=peer[randint(0, (len(peer)-1))]						 #calcula o proximo anonGW 
-	pacBin_cipher=crypt.encrypt(pacBin_plain,str(anon[1]))		 #encripta o pacote bin!
-	#signing(str(PORT_UDP),pacBin_cipher)						 #asssina o pacote
-	#print("\nPedido:"pacBin_cipher)
-	resp=enviarPedidoAGW(pacBin_cipher,anon) 					 #envia o pedido a outro anonGW
+	anon=peer[randint(0, (len(peer)-1))]						 #calcula o proximo anonGW
+
+	data_cipher=crypt.encrypt(data,str(anon[1]))				 #cifra o pedido!
+	sig=crypt.signing(str(PORT_UDP),data_cipher)				 #asssina o pedido!
+	pacote=tgl.Header(sig,1,0,id_cli,0,data_cipher)				 #encapsula num  pacote.
+	pacBin=pacote.converte()							    	 #pacote em Byts
+
+	resp=enviarPedidoAGW(pacBin,anon) 							 #envia o pedido a outro anonGW
 	return True
 
 
 
 #Metod usado pelo segundo anonGW,que envia a query ao servidor e renvia para anonGW
 def receberPedidoAnon(UDPServerSocket,addr,data_cipher):
-	#print("\nPedido encriptado:",data_cipher)								#mostrar o pedido encriptado!
-	data=crypt.decrypt(data_cipher,str(UDPServerSocket.getsockname()[1]))	#desencripta a msg
-	#print("\nPedido desencriptado:",data)									#mostrar o pedido desencriptado!
-	pacote=tgl.desconverte(data)											#deconverte pq precisa de mandar apenas o pedido ao servidor .
-	res = enviarServ(ServPORT,pacote,UDPServerSocket,addr)					#se já vier de um anonGW
+	pacote=tgl.desconverte(data_cipher)												#deconverte o pedido.
+	#print("\nPedido encriptado:",data_cipher)										#mostrar o pedido encriptado!
+	try:
+		crypt.verification('6666',pacote.getSignature(),pacote.getMsg())			#verifica a signatura.
+		print("Verificado com sucesso!\n")
+		plain_data=crypt.decrypt(pacote.getMsg(),str(PORT_UDP))						#desencripta a msg
+		#print("\nPedido desencriptado:",plain_data)								#mostrar o pedido desencriptado!
+		pacote_plain=tgl.Header(pacote.getSignature(),pacote.get_isQuery(),pacote.is_ultimoPac(),pacote.getCliente(),pacote.getNumPed(),plain_data)	#pacote desencriptado.
+		res = enviarServ(ServPORT,pacote_plain,UDPServerSocket,addr)				#envia ao servidor
+	except cryptography.exceptions.InvalidSignature:
+		print("Cliente desconhecido")
 
 
 #envia um Pedido ao servidor , e retorna a resposta. Tem de receber o pedido em byts(Não MEXER, está pronta!)
 def enviarServ(port,pacote,UDPServerSocket,addr): 
 	n_ped=1
 	h=parsePeer(HOST)
+	sig="asdfhasdkjfaskjndafskljnfalasdda"
 	try:
 		ss = socket.socket(socket.AF_INET, socket.SOCK_STREAM)	#socket TCP
 		ss.connect((h[0], port))								#socket para o servidor
-		ss.sendall(pacote.getMsg().encode()) 					#envia os dados para o serv 
+		#print(pacote.getMsg())##AQUI DA ERRO DA CHAVE "Data too long for key size. Encrypt less data or use a larger key size".
+		ss.sendall(pacote.getMsg()) 						#envia os dados para o serv 
 		while True:
-			dados = ss.recv(Tam_PACK) 							#recebe 1024 bits
+			dados = ss.recv(Tam_PACK) 										#recebe 30 byts
 			if not dados:
-				pacote2=tgl.Header(0,1,pacote.getCliente(),n_ped,dados)		#encapsula os dados num pacote
+				pacote2=tgl.Header(sig,0,1,pacote.getCliente(),n_ped,dados)	#encapsula os dados num pacote
 				pacBin2=pacote2.converte()									#converte o pacote para binario
 				UDPServerSocket.sendto(pacBin2,addr)						#envia o ultimo pacote para o anonGW
 				break
-			pacote=tgl.Header(0,0,pacote.getCliente(),n_ped,dados)			#encapsula os dados num pacote
-			pacBin=pacote.converte()										#converte o pacote para binario
-			n_ped+=1														#atualiza o numero do pacote.
-			UDPServerSocket.sendto(pacBin,addr)								#envia a reposta do servidor para o anonGW 
+			#encriptar
+			data_cipher=crypt.encrypt(dados,'6666')	
+			sig=crypt.signing(str(PORT_UDP),data_cipher)							#assino a msg
+			pacote=tgl.Header(sig,0,0,pacote.getCliente(),n_ped,data_cipher)		#encapsula os dados num pacote
+			pacBin=pacote.converte()												#converte o pacote para binario
+			n_ped+=1																#atualiza o numero do pacote.
+			UDPServerSocket.sendto(pacBin,addr)										#envia a reposta do servidor para o anonGW 
 	except Exception as e: 
 		print(e)
 		#print("OLA\n")
@@ -116,24 +129,29 @@ def enviarServ(port,pacote,UDPServerSocket,addr):
 
 
 def enviarPedidoAGW(msg,peer_addr):
-	sp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 	#socket UDP
-	sp.sendto(msg,(peer_addr[0], peer_addr[1]))				#envia a 1 anowGw
-	#tam_acc=0												# acumulador temporário de tamanho de cada pacotes.
-
-	while True:
-		(dados,adr) = sp.recvfrom(Tam_PACK+49) 			#recebe TamPAck bits + o cabeçalho. 
-		pacote=tgl.desconverte(dados)
-		(conn,addr,acc) = clientId[pacote.getCliente()]						#transforma os bits em um Objeto.
-		if(pacote.getTam()==1 and len(pacote.getMsg())== 0):
-			conn.close()
-			break
-		print("Cliente:",pacote.getCliente(),"\tN_Ped:",pacote.getNumPed(),"\n")
-		#tam_acc= acc +len(dados)-49
-		#atualizaDic(pacote.getCliente(),(conn,addr,tam_acc)) 
-		#(c1,a1,acc2)=clientId[pacote.getCliente()]
-		conn.sendto(pacote.getMsg().encode(),addr)# envia a resposta para o cliente,do ultimo AnonGw.
-		#tam_acc=0
-	sp.close()
+	try:
+		sp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 	#socket UDP
+		sp.sendto(msg,(peer_addr[0], peer_addr[1]))				#envia a 1 anowGw
+		#tam_acc=0												# acumulador temporário de tamanho de cada pacotes.
+		while True:
+			(dados,adr) = sp.recvfrom(Tam_PACK*8+Tam_Header) 			#recebe TamPAck bits + o cabeçalho. 
+			pacote=tgl.desconverte(dados)
+			(conn,addr,acc) = clientId[pacote.getCliente()]						#transforma os bits em um Objeto.
+			if(pacote.is_ultimoPac()==1 ):#and len(pacote.getMsg())== 0):
+				conn.close()
+				break
+			#tam_acc= acc +len(dados)-49
+			#atualizaDic(pacote.getCliente(),(conn,addr,tam_acc)) 
+			#(c1,a1,acc2)=clientId[pacote.getCliente()]
+			#print("VERi_FINAL\tSign:\t",pacote.getSignature(),"\nMSG:",pacote.getMsg())
+			crypt.verification('6667',pacote.getSignature(),pacote.getMsg())		#verifica a signatura.
+			print("Cliente:",pacote.getCliente(),"\tN_Ped:",pacote.getNumPed(),"\n","Verificado com sucesso!\n")
+			msg_plain=crypt.decrypt(pacote.getMsg(),'6666')							#desencriptar a msg.
+			conn.sendto(msg_plain,addr)												# envia a resposta para o cliente,do ultimo AnonGw.
+	except cryptography.exceptions.InvalidSignature:
+		print("Cliente desconhecido")
+	finally:	
+		sp.close()
 	return True
  
 
@@ -164,7 +182,7 @@ def initTcpSocket():
 #Inicia o  anonGW
 def init():
 	try:
-		geraChaves(PORT_UDP)#gera chaves privadas e publicas com o nome da porta UDP
+		geraChaves(PORT_UDP)														  #gera chaves privadas e publicas com o nome da porta UDP
 		#signal.signal(signal.SIGINT, signal_handler)
 		x = threading.Thread(target=initTcpSocket, args=())							  #thread reponsavel pela porta 80,atende pedidos TCP.
 		x.start()																	  #inicia  thread reponsavel pela porta 80.
