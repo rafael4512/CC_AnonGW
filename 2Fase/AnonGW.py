@@ -22,7 +22,7 @@ Tam_PACK=1024				#Tamanho de cada Pacote. Pode ser alterado.
 Tam_Header=322				#Tamanho Fixo do cabeçalho.
 Clientes=1					#acumaldor de Id's para clientes 
 iid_lock = threading.Lock()	#lock responsavel pelo  increment ID.
-pgid = os.getpid()
+pgid = os.getppid()         #pid do processo pai 
 
 MY_key = Fernet.generate_key()#Chave simetrica do anonGw executado.
 MY_fernet = Fernet(MY_key)
@@ -64,7 +64,8 @@ for x in range(3, len(sys.argv)):
 #Função responsável por fechar o AnonGW,quando se envia SIGINT.
 def signal_handler(sig, frame):
     print('\n\tAnonGW Fechado!')
-    sys.exit(0)
+    os.killpg(pgid,signal.SIGKILL)
+    #sys.exit(0)
 
 
 
@@ -221,10 +222,7 @@ def init():
 		print(e)
 	finally:
 		#x.join()
-		#os.killpg(pgid,signal.SIGKILL)
 		UDPServerSocket.close()
-
-
 
 
 
@@ -243,6 +241,8 @@ def trocarChaves(key):
 
 def geraChaves(port):	
 	crypt.generate_key(str(port))#funcao que gera as chaves
+
+
 
 init()
 
