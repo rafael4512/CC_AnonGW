@@ -1,8 +1,4 @@
 #coding: utf-8 
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
-import base64
-
 
 #classe para o cabeçalho dos pacotes do protocolo ANONGW
 class Header:
@@ -45,26 +41,19 @@ class Header:
 		byts  = self.sig + bits.encode() + self.msg
 		return byts
 	
-	def __str__(self):
-		return "Header:\nSig:"+str(self.sig)+"\nQuery:"+str(self.isQuery)+"\nUltimoPacote:"+str(self.ultimoPac)+"\nId_Cliente:"+str(self.id_cliente)+"\nN_Ped:"+str(self.n_ped)+"\nDATA:"+str(self.msg)
+	#def __str__(self):
+	#	return "Header:\nSig:"+str(self.sig)+"\nQuery:"+str(self.isQuery)+"\nUltimoPacote:"+str(self.ultimoPac)+"\nId_Cliente:"+str(self.id_cliente)+"\nN_Ped:"+str(self.n_ped)+"\nDATA:"+str(self.msg)
 
 
 
 def desconverte(byts):
 	b=byts[256:322].decode()
-	#print("Header:",b,"\n")
-	#print("4444444\n")
 	sig=byts[:256]
-	#print("\tgetSignature::",sig)
 	isQuery=int(b[0],2)
-	#print("\tisQuery:",isQuery)
 	ultimoPac=int(b[1],2) 
-	#print("\tUltimoPAC:",ultimoPac)
 	id_cliente=int(b[2:18],2)
-	#print("\tId:",id_cliente)
 	n_ped=int(b[18:50],2)
 	port=int(b[50:66],2)
-	#print("\tNped:",n_ped)
 	msg=byts[322:]
 	return Header(sig,isQuery,ultimoPac,id_cliente,n_ped,port,msg)
 

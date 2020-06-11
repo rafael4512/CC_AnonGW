@@ -13,21 +13,23 @@ def cli():
 	aux=response.read(2000)
 	#time.sleep(0.3)
 	print("\nCliente1:",aux)#"Thread:ID->",threading.get_ident(),
+	conn.close()
 	  
 
 def cli2():
 	BODY = "***filecontents***"
 
-	conn = http.client.HTTPConnection("127.0.0.1", 81)
+	conn = http.client.HTTPConnection("127.0.0.1", 82)
 	conn.request("GET", "/", BODY)
 	response = conn.getresponse()
 	#print(response)#, response.reason
 	print("\nCliente2",response.read(2000))
+	conn.close()
 	  
 
 
 
-for x in range(0,10):
+for x in range(0,5):
 	y=threading.Thread(target=cli, args=())
 	y2=threading.Thread(target=cli2, args=())
 	#if (x==3):
