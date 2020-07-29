@@ -1,4 +1,4 @@
 Falta fazer a retransmissão de pacotes perdidos,
-Ajeitar a sicronização de pacotes.
+Ajeitar a sicronização de anonGW(em vez de usar sleeps).
 
 
